@@ -23,7 +23,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -35,15 +34,23 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 
-// ===================== Lab4 核心1：导航路由定义（3个屏幕）=====================
+// ===================== 导航路由（7个页面，满足≥5要求）=====================
 @Serializable
-object Home // 首页
+object Home        // 地图首页
 @Serializable
-data class TravelDetail(val placeId: Int) // 景点详情页（传参：景点ID）
+data class TravelDetail(val placeId: Int) // 详情页
 @Serializable
-object AddTravel // 添加旅行页
+object AddTravel   // 添加旅行
+@Serializable
+object SdgIntro    // SDG介绍
+@Serializable
+object TravelStats // 旅行统计
+@Serializable
+object Explore     // 发现页（新增）
+@Serializable
+object Profile     // 个人页（新增）
 
-// ===================== 数据类（你原有代码，保留）=====================
+// ===================== 数据类 =====================
 data class TravelPlace(
     val id: Int,
     val name: String,
@@ -63,15 +70,8 @@ data class CategoryCard(
     val subtitle: String,
 )
 
-data class BottomNavItem(
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val title: String,
-    val isSelected: Boolean
-)
-
-// ===================== Lab4 核心2：ViewModel（跨页面共享数据，旋转不丢失）=====================
+// ===================== ViewModel（全局共享数据）=====================
 class TravelViewModel : ViewModel() {
-    // 共享的旅行数据，所有页面都能访问
     private val _travelList = mutableStateListOf(
         TravelPlace(1,"Sanya Yalong Bay","Yalong Bay Road, Jiyang District, Sanya, Hainan","2026.01.20 - 2026.01.25","No.1 Bay in the world, fine sand and clear sea water."),
         TravelPlace(2,"Dali Ancient City","Dali City, Dali Bai Autonomous Prefecture, Yunnan","2026.02.05 - 2026.02.10","Capital of Nanzhao Kingdom, Ming and Qing architecture, rich ethnic customs."),
@@ -79,18 +79,16 @@ class TravelViewModel : ViewModel() {
     )
     val travelList: List<TravelPlace> = _travelList
 
-    // 根据ID获取景点详情
     fun getPlaceById(id: Int): TravelPlace? {
         return _travelList.find { it.id == id }
     }
 
-    // 添加新的旅行地点
     fun addTravelPlace(place: TravelPlace) {
         _travelList.add(place)
     }
 }
 
-// ===================== 模拟数据（你原有代码）=====================
+// ===================== 模拟数据 =====================
 val quickFunctions = listOf(
     QuickFunction(Icons.Filled.DriveEta, "Drive"),
     QuickFunction(Icons.Filled.DirectionsBus, "Bus"),
@@ -111,7 +109,7 @@ val categoryList = listOf(
     CategoryCard(Icons.Filled.LocalBar, "Entertainment", "Relaxation Spots")
 )
 
-// ===================== 主Activity（改造为导航容器）=====================
+// ===================== 主Activity =====================
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,17 +117,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             var darkMode by remember { mutableStateOf(false) }
             TravelMapTheme(darkTheme = darkMode) {
-                // Lab4：导航控制器
                 val navController = rememberNavController()
-                // 获取共享的 ViewModel
                 val travelViewModel: TravelViewModel = viewModel()
 
-                // 导航主机：管理3个页面跳转
                 NavHost(
                     navController = navController,
                     startDestination = Home
                 ) {
-                    // 页面1：首页
+                    // 首页
                     composable<Home> {
                         HomeScreen(
                             darkMode = darkMode,
@@ -138,8 +133,7 @@ class MainActivity : ComponentActivity() {
                             viewModel = travelViewModel
                         )
                     }
-
-                    // 页面2：景点详情页
+                    // 详情页
                     composable<TravelDetail> { backStackEntry ->
                         val args = backStackEntry.toRoute<TravelDetail>()
                         TravelDetailScreen(
@@ -148,13 +142,25 @@ class MainActivity : ComponentActivity() {
                             navController = navController
                         )
                     }
-
-                    // 页面3：添加旅行页
+                    // 添加旅行
                     composable<AddTravel> {
-                        AddTravelScreen(
-                            navController = navController,
-                            viewModel = travelViewModel
-                        )
+                        AddTravelScreen(navController, travelViewModel)
+                    }
+                    // SDG介绍
+                    composable<SdgIntro> {
+                        SdgIntroScreen(navController)
+                    }
+                    // 旅行统计
+                    composable<TravelStats> {
+                        TravelStatsScreen(travelViewModel, navController)
+                    }
+                    // 发现页（新增）
+                    composable<Explore> {
+                        ExploreScreen(navController)
+                    }
+                    // 个人中心（新增）
+                    composable<Profile> {
+                        ProfileScreen(travelViewModel, navController)
                     }
                 }
             }
@@ -162,7 +168,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ===================== Lab4 页面1：首页（你原有所有UI）=====================
+// ===================== 页面1：首页 =====================
 @Composable
 fun HomeScreen(
     darkMode: Boolean,
@@ -172,7 +178,7 @@ fun HomeScreen(
 ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        bottomBar = { BottomNavigationBar() }
+        bottomBar = { BottomNavigationBar(navController) }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -182,32 +188,32 @@ fun HomeScreen(
         ) {
             item {
                 Text(
-                    text = "A206702",
+                    "A206702",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleLarge
+                    modifier = Modifier.padding(16.dp)
                 )
             }
-
-            item {
-                MapPreviewSection(
-                    onDarkModeToggle = { onDarkModeChange(!darkMode) },
-                    isDarkMode = darkMode
-                )
-            }
-
+            item { MapPreviewSection({ onDarkModeChange(!darkMode) }, darkMode) }
             item { SearchSection() }
 
-            // 跳转到添加旅行页面的按钮
             item {
-                Button(
-                    onClick = { navController.navigate(AddTravel) },
-                    modifier = Modifier.padding(16.dp).fillMaxWidth()
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add New Travel")
+                Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { navController.navigate(AddTravel) }, Modifier.weight(1f)) {
+                        Icon(Icons.Filled.Add, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Add")
+                    }
+                    Button(onClick = { navController.navigate(SdgIntro) }, Modifier.weight(1f)) {
+                        Icon(Icons.Filled.Info, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("SDG")
+                    }
+                    Button(onClick = { navController.navigate(TravelStats) }, Modifier.weight(1f)) {
+                        Icon(Icons.Filled.BarChart, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Stats")
+                    }
                 }
             }
 
@@ -215,14 +221,11 @@ fun HomeScreen(
             item { CategorySection() }
 
             item {
-                Text(
-                    "My Travel Footprints",
+                Text("My Travel Footprints",
                     style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(16.dp)
-                )
+                    modifier = Modifier.padding(16.dp))
             }
 
-            // 点击卡片跳转到详情页
             items(viewModel.travelList) { place ->
                 TravelPlaceItem(place) {
                     navController.navigate(TravelDetail(placeId = place.id))
@@ -232,7 +235,7 @@ fun HomeScreen(
     }
 }
 
-// ===================== Lab4 页面2：景点详情页 =====================
+// ===================== 页面2：景点详情 =====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TravelDetailScreen(
@@ -241,58 +244,44 @@ fun TravelDetailScreen(
     navController: NavController
 ) {
     val place = viewModel.getPlaceById(placeId) ?: return
-
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Travel Details") },
+                title = { Text("Details") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 }
             )
-        }
+        },
+        bottomBar = { BottomNavigationBar(navController) }
     ) { innerPadding ->
         Column(
-            modifier = Modifier
+            Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(4.dp)
-            ) {
+            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(
-                        text = place.name,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(place.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
-                    Text("Address: ${place.address}", style = MaterialTheme.typography.bodyLarge)
-                    Text("Date: ${place.date}", style = MaterialTheme.typography.bodyLarge)
+                    Text("Address: ${place.address}")
+                    Text("Date: ${place.date}")
                     Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = "Description:",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(place.desc, style = MaterialTheme.typography.bodyMedium)
+                    Text("Description:", fontWeight = FontWeight.Medium)
+                    Text(place.desc)
                 }
             }
         }
     }
 }
 
-// ===================== Lab4 页面3：添加旅行页面 =====================
+// ===================== 页面3：添加旅行 =====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddTravelScreen(
-    navController: NavController,
-    viewModel: TravelViewModel
-) {
+fun AddTravelScreen(navController: NavController, viewModel: TravelViewModel) {
     var name by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
     var date by remember { mutableStateOf("") }
@@ -301,229 +290,288 @@ fun AddTravelScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add New Travel") },
+                title = { Text("Add Travel") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 }
             )
-        }
+        },
+        bottomBar = { BottomNavigationBar(navController) }
     ) { innerPadding ->
         Column(
-            modifier = Modifier
+            Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Place Name") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = address,
-                onValueChange = { address = it },
-                label = { Text("Address") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = date,
-                onValueChange = { date = it },
-                label = { Text("Date") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = desc,
-                onValueChange = { desc = it },
-                label = { Text("Description") },
-                modifier = Modifier.fillMaxWidth().height(120.dp)
-            )
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = date, onValueChange = { date = it }, label = { Text("Date") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth().height(120.dp))
 
-            Button(
-                onClick = {
-                    if (name.isNotBlank()) {
-                        viewModel.addTravelPlace(
-                            TravelPlace(
-                                id = (viewModel.travelList.size + 1),
-                                name = name,
-                                address = address,
-                                date = date,
-                                desc = desc
-                            )
-                        )
-                        navController.popBackStack() // 添加完成返回首页
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
-            ) {
-                Text("Save Travel")
+            Button(onClick = {
+                if (name.isNotBlank()) {
+                    viewModel.addTravelPlace(
+                        TravelPlace(viewModel.travelList.size + 1, name, address, date, desc)
+                    )
+                    navController.popBackStack()
+                }
+            }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                Text("Save")
             }
         }
     }
 }
 
-// ===================== 你原有UI组件（无修改，完整保留）=====================
+// ===================== 页面4：SDG介绍 =====================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SdgIntroScreen(navController: NavController) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("SDG 11: Sustainable Cities") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                }
+            )
+        },
+        bottomBar = { BottomNavigationBar(navController) }
+    ) { innerPadding ->
+        Column(
+            Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.Top,
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text("Problem", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Malaysian cities face traffic congestion, carbon emissions, and lack of sustainable travel tracking tools.", modifier = Modifier.padding(top = 8.dp))
+
+            Spacer(Modifier.height(16.dp))
+            Text("Solution", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("This app helps users record green travel, promote low-carbon transportation, and support sustainable urban mobility (SDG 11).", modifier = Modifier.padding(top = 8.dp))
+        }
+    }
+}
+
+// ===================== 页面5：旅行统计 =====================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TravelStatsScreen(viewModel: TravelViewModel, navController: NavController) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Travel Statistics") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                }
+            )
+        },
+        bottomBar = { BottomNavigationBar(navController) }
+    ) { innerPadding ->
+        Column(
+            Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(8.dp)) {
+                Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Total Travel Records", fontSize = 18.sp)
+                    Text("${viewModel.travelList.size}", fontSize = 40.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                }
+            }
+        }
+    }
+}
+
+// ===================== 页面6：发现页（新增）=====================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExploreScreen(navController: NavController) {
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("Sustainable Travel Explore") })
+        },
+        bottomBar = { BottomNavigationBar(navController) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+        ) {
+            Text("Malaysia Green Travel Recommendations",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(16.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("1. Use Public Transport", fontWeight = FontWeight.Medium)
+                    Text("Reduce carbon footprint by taking buses & trains (SDG 11)")
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("2. Eco-Friendly Tourist Spots", fontWeight = FontWeight.Medium)
+                    Text("Visit sustainable attractions in Kuala Lumpur & Penang")
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("3. Walk & Cycle", fontWeight = FontWeight.Medium)
+                    Text("Healthy and green way to explore cities")
+                }
+            }
+        }
+    }
+}
+
+// ===================== 页面7：个人中心（新增）=====================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProfileScreen(viewModel: TravelViewModel, navController: NavController) {
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text("My Profile") })
+        },
+        bottomBar = { BottomNavigationBar(navController) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // 头像
+            Card(shape = CircleShape, modifier = Modifier.size(100.dp)) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Person, null, modifier = Modifier.size(60.dp))
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("Travel User", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text("A206702", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(24.dp))
+
+            // 统计卡片
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.padding(20.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("${viewModel.travelList.size}", fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                        Text("Trips")
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("03", fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                        Text("Countries")
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Green", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = Color(0xFF4CAF50))
+                        Text("Traveler")
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ===================== 底部导航（支持点击切换）=====================
+@Composable
+fun BottomNavigationBar(navController: NavController) {
+    val currentRoute = navController.currentDestination?.route
+
+    NavigationBar {
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Map, null) },
+            label = { Text("Map") },
+            selected = currentRoute == Home::class.qualifiedName,
+            onClick = { navController.navigate(Home) }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Explore, null) },
+            label = { Text("Explore") },
+            selected = currentRoute == Explore::class.qualifiedName,
+            onClick = { navController.navigate(Explore) }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Person, null) },
+            label = { Text("Profile") },
+            selected = currentRoute == Profile::class.qualifiedName,
+            onClick = { navController.navigate(Profile) }
+        )
+    }
+}
+
+// ===================== UI 公共组件 =====================
 @Composable
 fun SearchSection() {
     var searchText by remember { mutableStateOf("") }
-    var searchResult by remember { mutableStateOf("Enter a location and search") }
-
+    var searchResult by remember { mutableStateOf("Enter a location") }
     Column {
-        SearchBarSection(searchText) { searchText = it }
-        SearchActionSection(
-            searchText = searchText,
-            searchResult = searchResult,
-            onSearchClick = {
-                searchResult = if (searchText.isBlank()) {
-                    "Please enter a valid location!"
-                } else {
-                    "Searching for: $searchText \nRelated places found~"
-                }
-            }
+        OutlinedTextField(
+            value = searchText,
+            onValueChange = { searchText = it },
+            placeholder = { Text("Search places") },
+            leadingIcon = { Icon(Icons.Filled.Search, null) },
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            shape = CircleShape
         )
+        Button(onClick = {
+            searchResult = if (searchText.isBlank()) "Enter location!" else "Searching: $searchText"
+        }, modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
+            Text("Search")
+        }
+        Text(searchResult, Modifier.padding(16.dp))
     }
 }
 
 @Composable
-fun MapPreviewSection(
-    onDarkModeToggle: () -> Unit,
-    isDarkMode: Boolean
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(280.dp)
-            .padding(16.dp),
-        shape = MaterialTheme.shapes.large,
-        elevation = CardDefaults.cardElevation(4.dp)
-    ) {
+fun MapPreviewSection(onDarkModeToggle: () -> Unit, isDarkMode: Boolean) {
+    Card(Modifier.fillMaxWidth().height(280.dp).padding(16.dp)) {
         Box {
             Image(
-                painter = painterResource(id = R.drawable.ic_launcher_background),
-                contentDescription = "Map",
+                painter = painterResource(R.drawable.ic_launcher_background),
+                contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-
-            Column(
-                Modifier.align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .width(48.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                IconButton(onClick = onDarkModeToggle) {
-                    Icon(
-                        imageVector = if (isDarkMode) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                        contentDescription = "Toggle Dark Mode",
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-                IconButton({}) { Icon(Icons.Filled.Add, null, tint = MaterialTheme.colorScheme.onPrimary) }
-                IconButton({}) { Icon(Icons.Filled.Layers, null, tint = MaterialTheme.colorScheme.onPrimary) }
-                IconButton({}) { Icon(Icons.Filled.MyLocation, null, tint = MaterialTheme.colorScheme.onPrimary) }
-                IconButton({}) { Icon(Icons.Filled.Directions, null, tint = MaterialTheme.colorScheme.onPrimary) }
-            }
-
-            Column(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(Icons.Filled.LocationOn, null, Modifier.size(48.dp), MaterialTheme.colorScheme.primary)
-                Text(
-                    "Current Location",
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), MaterialTheme.shapes.small)
-                        .padding(4.dp)
-                )
+            Column(Modifier.align(Alignment.TopEnd).padding(16.dp)) {
+                IconButton(onClick = onDarkModeToggle) { Icon(if (isDarkMode) Icons.Filled.LightMode else Icons.Filled.DarkMode, null) }
+                IconButton({}) { Icon(Icons.Filled.Add, null) }
+                IconButton({}) { Icon(Icons.Filled.Layers, null) }
             }
         }
-    }
-}
-
-@Composable
-fun SearchBarSection(
-    searchText: String,
-    onTextChanged: (String) -> Unit
-) {
-    OutlinedTextField(
-        value = searchText,
-        onValueChange = onTextChanged,
-        placeholder = { Text("Search places, bus, subway") },
-        leadingIcon = { Icon(Icons.Filled.Search, null) },
-        trailingIcon = {
-            Row(
-                Modifier.padding(end = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(Icons.Filled.QrCode, null)
-                Icon(Icons.Filled.Mic, null)
-            }
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = CircleShape,
-        colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-            focusedContainerColor = MaterialTheme.colorScheme.surface
-        )
-    )
-}
-
-@Composable
-fun SearchActionSection(
-    searchText: String,
-    searchResult: String,
-    onSearchClick: () -> Unit
-) {
-    Column(Modifier.padding(16.dp)) {
-        Button(onClick = onSearchClick, modifier = Modifier.fillMaxWidth()) {
-            Text("Search")
-        }
-        Text(
-            text = searchResult,
-            modifier = Modifier.padding(top = 8.dp),
-            style = MaterialTheme.typography.bodyMedium
-        )
     }
 }
 
 @Composable
 fun QuickFunctionSection() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        Text(
-            "Quick Functions",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        quickFunctions.chunked(5).forEach { rowItems ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                rowItems.forEach {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(4.dp)
-                    ) {
-                        Card(
-                            shape = CircleShape,
-                            modifier = Modifier.size(48.dp),
-                            colors = CardDefaults.cardColors(MaterialTheme.colorScheme.primaryContainer)
-                        ) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(it.icon, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                            }
-                        }
-                        Text(it.title, Modifier.padding(top = 4.dp), fontSize = 12.sp)
+    Column(Modifier.padding(16.dp)) {
+        Text("Quick Functions", style = MaterialTheme.typography.titleMedium)
+        quickFunctions.chunked(5).forEach { row ->
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceAround) {
+                row.forEach {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Card(modifier = Modifier.size(48.dp), shape = CircleShape) { Box(Modifier.fillMaxSize(), Alignment.Center) { Icon(it.icon, null) } }
+                        Text(it.title, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                     }
                 }
             }
@@ -535,109 +583,41 @@ fun QuickFunctionSection() {
 fun CategorySection() {
     Column(Modifier.padding(16.dp)) {
         Text("Categories", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
         categoryList.forEach {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                elevation = CardDefaults.cardElevation(2.dp)
-            ) {
-                Row(
-                    Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Card(
-                        shape = CircleShape,
-                        modifier = Modifier.size(40.dp),
-                        colors = CardDefaults.cardColors(MaterialTheme.colorScheme.secondaryContainer)
-                    ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(it.icon, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                        }
-                    }
+            Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Card(modifier = Modifier.size(40.dp), shape = CircleShape) { Box(Modifier.fillMaxSize(), Alignment.Center) { Icon(it.icon, null) } }
                     Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(it.title, fontWeight = FontWeight.Medium)
-                        Text(it.subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Column { Text(it.title); Text(it.subtitle, fontSize = 12.sp) }
                 }
             }
         }
     }
 }
 
-// 新增点击事件
 @Composable
 fun TravelPlaceItem(place: TravelPlace, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(16.dp, 8.dp)
             .animateContentSize(),
-        elevation = CardDefaults.cardElevation(4.dp),
-        onClick = onClick // 点击跳转
+        onClick = onClick
     ) {
         Column(Modifier.padding(16.dp)) {
             Text(place.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(place.address, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(place.date, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-            Spacer(Modifier.height(4.dp))
-            Text(place.desc, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+            Text(place.address)
+            Text(place.date)
+            Text(place.desc, maxLines = 2)
         }
     }
 }
 
-@Composable
-fun BottomNavigationBar() {
-    NavigationBar {
-        val items = listOf(
-            BottomNavItem(Icons.Filled.Map, "Map", true),
-            BottomNavItem(Icons.Filled.Explore, "Explore", false),
-            BottomNavItem(Icons.Filled.Person, "Profile", false)
-        )
-        items.forEach {
-            NavigationBarItem(
-                icon = { Icon(it.icon, null) },
-                label = { Text(it.title) },
-                selected = it.isSelected,
-                onClick = {}
-            )
-        }
-    }
-}
-
-// ===================== 主题（你原有代码，保留）=====================
-private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF4CAF50),
-    secondary = Color(0xFF2196F3),
-    tertiary = Color(0xFFFF9800)
-)
-
-private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF81C784),
-    secondary = Color(0xFF64B5F6),
-    tertiary = Color(0xFFFFB74D)
-)
+// ===================== 应用主题 =====================
+private val LightColorScheme = lightColorScheme(primary = Color(0xFF4CAF50), secondary = Color(0xFF2196F3))
+private val DarkColorScheme = darkColorScheme(primary = Color(0xFF81C784), secondary = Color(0xFF64B5F6))
 
 @Composable
-fun TravelMapTheme(
-    darkTheme: Boolean = false,
-    content: @Composable () -> Unit
-) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography(),
-        content = content
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun DefaultPreview() {
-    TravelMapTheme {
-        HomeScreen(false, {}, rememberNavController(), viewModel())
-    }
+fun TravelMapTheme(darkTheme: Boolean = false, content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme, content = content)
 }
