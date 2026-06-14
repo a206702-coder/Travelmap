@@ -2,7 +2,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Internet — required by Retrofit (Open-Meteo API) and Firebase Firestore -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- GPS Sensor — read the device's current location for the Air Quality feature -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Declares that the app uses location hardware, but the app still works without it -->
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
+
     <application
+        android:name=".TravelApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -10,12 +22,12 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.TravelMap">
+        android:theme="@style/Theme.A206702_HEXUYUTONG_lab5">
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.TravelMap">
+            android:theme="@style/Theme.A206702_HEXUYUTONG_lab5">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

@@ -1,17 +1,27 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.1.10"
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
+}
+
+// Apply the Google Services plugin ONLY when google-services.json is present.
+// This keeps the project buildable before Firebase is configured; once you drop
+// the real google-services.json into app/, the plugin auto-applies and Firestore
+// starts working with no further code changes. (See README → Firebase setup.)
+if (project.file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 android {
     namespace = "com.example.travelmap"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.travelmap"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -31,27 +41,50 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    kotlinOptions {
+        jvmTarget = "11"
+    }
     buildFeatures {
         compose = true
     }
 }
 
 dependencies {
-    // 原有基础Compose依赖
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-
-    // ========== Lab4 新增必备依赖 ==========
-    // 1. Compose 页面导航 (Update to 2.8.0+ for type-safe navigation)
-    implementation("androidx.navigation:navigation-compose:2.8.7")
-    // 2. ViewModel Compose 生命周期数据管理
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    // 3. Icons 完整图标库
+    implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
-    // 4. Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.kotlinx.serialization.json)
+
+    // Room — Local Persistence pillar
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // Retrofit — Data from the Internet pillar (Open-Meteo Air Quality REST API)
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+
+    // Firebase Firestore — Cloud Integration pillar (Community Green Board)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.firestore)
+
+    // Location/GPS — Sensor pillar (FusedLocationProviderClient)
+    implementation(libs.play.services.location)
+    implementation(libs.kotlinx.coroutines.play.services)
+
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

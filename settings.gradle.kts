@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Travel map"
+rootProject.name = "A206702_HEXUYUTONG_lab5"
 include(":app")

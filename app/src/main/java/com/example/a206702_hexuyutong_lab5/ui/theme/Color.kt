@@ -1,4 +1,4 @@
-package com.example.travelmap.ui.theme
+package com.example.a206702_hexuyutong_lab5.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

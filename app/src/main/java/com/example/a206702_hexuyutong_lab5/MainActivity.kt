@@ -25,16 +25,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 
-// ===================== 导航路由（7个页面，满足≥5要求）=====================
+// ===================== 导航路由（7个页面）=====================
 @Serializable
 object Home        // 地图首页
 @Serializable
@@ -46,18 +46,18 @@ object SdgIntro    // SDG介绍
 @Serializable
 object TravelStats // 旅行统计
 @Serializable
-object Explore     // 发现页（新增）
+object Explore     // 发现页
 @Serializable
-object Profile     // 个人页（新增）
+object Profile     // 个人页
+@Serializable
+object AirQuality       // 空气质量（GPS 传感器 + Open-Meteo API）
+@Serializable
+object Community        // 社区绿色看板（Firebase Firestore 读）
+@Serializable
+object AddCommunityPost // 发布社区帖子（Firebase Firestore 写）
 
 // ===================== 数据类 =====================
-data class TravelPlace(
-    val id: Int,
-    val name: String,
-    val address: String,
-    val date: String,
-    val desc: String
-)
+// TravelPlace 已迁移为 Room Entity，见 data/TravelPlace.kt
 
 data class QuickFunction(
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -70,23 +70,8 @@ data class CategoryCard(
     val subtitle: String,
 )
 
-// ===================== ViewModel（全局共享数据）=====================
-class TravelViewModel : ViewModel() {
-    private val _travelList = mutableStateListOf(
-        TravelPlace(1,"Sanya Yalong Bay","Yalong Bay Road, Jiyang District, Sanya, Hainan","2026.01.20 - 2026.01.25","No.1 Bay in the world, fine sand and clear sea water."),
-        TravelPlace(2,"Dali Ancient City","Dali City, Dali Bai Autonomous Prefecture, Yunnan","2026.02.05 - 2026.02.10","Capital of Nanzhao Kingdom, Ming and Qing architecture, rich ethnic customs."),
-        TravelPlace(3,"Xi'an Terracotta Army","Terracotta Army Scenic Area, Lintong District, Xi'an, Shaanxi","2026.03.10 - 2026.03.15","World Cultural Heritage, stunning underground army.")
-    )
-    val travelList: List<TravelPlace> = _travelList
-
-    fun getPlaceById(id: Int): TravelPlace? {
-        return _travelList.find { it.id == id }
-    }
-
-    fun addTravelPlace(place: TravelPlace) {
-        _travelList.add(place)
-    }
-}
+// ===================== ViewModel =====================
+// TravelViewModel 已升级为 Room + Repository + StateFlow，见 TravelViewModel.kt
 
 // ===================== 模拟数据 =====================
 val quickFunctions = listOf(
@@ -118,13 +103,12 @@ class MainActivity : ComponentActivity() {
             var darkMode by remember { mutableStateOf(false) }
             TravelMapTheme(darkTheme = darkMode) {
                 val navController = rememberNavController()
-                val travelViewModel: TravelViewModel = viewModel()
+                val travelViewModel: TravelViewModel = viewModel(factory = TravelViewModel.Factory)
 
                 NavHost(
                     navController = navController,
                     startDestination = Home
                 ) {
-                    // 首页
                     composable<Home> {
                         HomeScreen(
                             darkMode = darkMode,
@@ -133,7 +117,6 @@ class MainActivity : ComponentActivity() {
                             viewModel = travelViewModel
                         )
                     }
-                    // 详情页
                     composable<TravelDetail> { backStackEntry ->
                         val args = backStackEntry.toRoute<TravelDetail>()
                         TravelDetailScreen(
@@ -142,25 +125,35 @@ class MainActivity : ComponentActivity() {
                             navController = navController
                         )
                     }
-                    // 添加旅行
                     composable<AddTravel> {
                         AddTravelScreen(navController, travelViewModel)
                     }
-                    // SDG介绍
                     composable<SdgIntro> {
                         SdgIntroScreen(navController)
                     }
-                    // 旅行统计
                     composable<TravelStats> {
                         TravelStatsScreen(travelViewModel, navController)
                     }
-                    // 发现页（新增）
                     composable<Explore> {
                         ExploreScreen(navController)
                     }
-                    // 个人中心（新增）
                     composable<Profile> {
                         ProfileScreen(travelViewModel, navController)
+                    }
+                    composable<AirQuality> {
+                        val airVm: AirQualityViewModel =
+                            viewModel(factory = AirQualityViewModel.Factory)
+                        AirQualityScreen(airVm, navController)
+                    }
+                    composable<Community> {
+                        val communityVm: CommunityViewModel =
+                            viewModel(factory = CommunityViewModel.Factory)
+                        CommunityScreen(communityVm, navController)
+                    }
+                    composable<AddCommunityPost> {
+                        val communityVm: CommunityViewModel =
+                            viewModel(factory = CommunityViewModel.Factory)
+                        AddCommunityPostScreen(communityVm, navController)
                     }
                 }
             }
@@ -176,6 +169,7 @@ fun HomeScreen(
     navController: NavController,
     viewModel: TravelViewModel
 ) {
+    val travelList by viewModel.travelList.collectAsState()
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = { BottomNavigationBar(navController) }
@@ -226,7 +220,7 @@ fun HomeScreen(
                     modifier = Modifier.padding(16.dp))
             }
 
-            items(viewModel.travelList) { place ->
+            items(travelList) { place ->
                 TravelPlaceItem(place) {
                     navController.navigate(TravelDetail(placeId = place.id))
                 }
@@ -243,7 +237,26 @@ fun TravelDetailScreen(
     viewModel: TravelViewModel,
     navController: NavController
 ) {
-    val place = viewModel.getPlaceById(placeId) ?: return
+    val place by remember(placeId) { viewModel.getPlaceById(placeId) }.collectAsState()
+    // Cloud Integration: this screen can push a local (Room) record up to Firestore.
+    val communityViewModel: CommunityViewModel = viewModel(factory = CommunityViewModel.Factory)
+    val addStatus by communityViewModel.addStatus.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(addStatus) {
+        when (val s = addStatus) {
+            is AddPostStatus.Success -> {
+                snackbarHostState.showSnackbar("Shared to the Community Green Board!")
+                communityViewModel.resetStatus()
+            }
+            is AddPostStatus.Error -> {
+                snackbarHostState.showSnackbar("Share failed: ${s.message}")
+                communityViewModel.resetStatus()
+            }
+            else -> Unit
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -255,6 +268,7 @@ fun TravelDetailScreen(
                 }
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = { BottomNavigationBar(navController) }
     ) { innerPadding ->
         Column(
@@ -263,15 +277,32 @@ fun TravelDetailScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(place.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Address: ${place.address}")
-                    Text("Date: ${place.date}")
-                    Spacer(Modifier.height(16.dp))
-                    Text("Description:", fontWeight = FontWeight.Medium)
-                    Text(place.desc)
+            place?.let { p ->
+                Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(4.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(p.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        Text("Address: ${p.address}")
+                        Text("Date: ${p.date}")
+                        Spacer(Modifier.height(16.dp))
+                        Text("Description:", fontWeight = FontWeight.Medium)
+                        Text(p.desc)
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+                // Room → Firestore: share this private record to the public community board.
+                Button(
+                    onClick = { communityViewModel.sharePlace(p) },
+                    enabled = communityViewModel.isCloudAvailable && addStatus !is AddPostStatus.Saving,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.CloudUpload, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (communityViewModel.isCloudAvailable) "Share to Community"
+                        else "Connect Firebase to share"
+                    )
                 }
             }
         }
@@ -314,9 +345,7 @@ fun AddTravelScreen(navController: NavController, viewModel: TravelViewModel) {
 
             Button(onClick = {
                 if (name.isNotBlank()) {
-                    viewModel.addTravelPlace(
-                        TravelPlace(viewModel.travelList.size + 1, name, address, date, desc)
-                    )
+                    viewModel.addTravelPlace(name, address, date, desc)
                     navController.popBackStack()
                 }
             }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
@@ -365,6 +394,7 @@ fun SdgIntroScreen(navController: NavController) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TravelStatsScreen(viewModel: TravelViewModel, navController: NavController) {
+    val travelList by viewModel.travelList.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -388,14 +418,14 @@ fun TravelStatsScreen(viewModel: TravelViewModel, navController: NavController) 
             Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(8.dp)) {
                 Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Total Travel Records", fontSize = 18.sp)
-                    Text("${viewModel.travelList.size}", fontSize = 40.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    Text("${travelList.size}", fontSize = 40.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
                 }
             }
         }
     }
 }
 
-// ===================== 页面6：发现页（新增）=====================
+// ===================== 页面6：发现页 =====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExploreScreen(navController: NavController) {
@@ -440,10 +470,11 @@ fun ExploreScreen(navController: NavController) {
     }
 }
 
-// ===================== 页面7：个人中心（新增）=====================
+// ===================== 页面7：个人中心 =====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(viewModel: TravelViewModel, navController: NavController) {
+    val travelList by viewModel.travelList.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("My Profile") })
@@ -476,7 +507,7 @@ fun ProfileScreen(viewModel: TravelViewModel, navController: NavController) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("${viewModel.travelList.size}", fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                        Text("${travelList.size}", fontWeight = FontWeight.Bold, fontSize = 24.sp)
                         Text("Trips")
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -493,28 +524,40 @@ fun ProfileScreen(viewModel: TravelViewModel, navController: NavController) {
     }
 }
 
-// ===================== 底部导航（支持点击切换）=====================
+// ===================== 底部导航（已修复选中状态）=====================
 @Composable
 fun BottomNavigationBar(navController: NavController) {
-    val currentRoute = navController.currentDestination?.route
-
+    val currentBackStack by navController.currentBackStackEntryAsState()
+    val currentDestination = currentBackStack?.destination
     NavigationBar {
         NavigationBarItem(
             icon = { Icon(Icons.Filled.Map, null) },
             label = { Text("Map") },
-            selected = currentRoute == Home::class.qualifiedName,
+            selected = currentDestination?.route == Home::class.qualifiedName,
             onClick = { navController.navigate(Home) }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Air, null) },
+            label = { Text("Air") },
+            selected = currentDestination?.route == AirQuality::class.qualifiedName,
+            onClick = { navController.navigate(AirQuality) }
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Groups, null) },
+            label = { Text("Community") },
+            selected = currentDestination?.route == Community::class.qualifiedName,
+            onClick = { navController.navigate(Community) }
         )
         NavigationBarItem(
             icon = { Icon(Icons.Filled.Explore, null) },
             label = { Text("Explore") },
-            selected = currentRoute == Explore::class.qualifiedName,
+            selected = currentDestination?.route == Explore::class.qualifiedName,
             onClick = { navController.navigate(Explore) }
         )
         NavigationBarItem(
             icon = { Icon(Icons.Filled.Person, null) },
             label = { Text("Profile") },
-            selected = currentRoute == Profile::class.qualifiedName,
+            selected = currentDestination?.route == Profile::class.qualifiedName,
             onClick = { navController.navigate(Profile) }
         )
     }
@@ -546,12 +589,13 @@ fun SearchSection() {
 @Composable
 fun MapPreviewSection(onDarkModeToggle: () -> Unit, isDarkMode: Boolean) {
     Card(Modifier.fillMaxWidth().height(280.dp).padding(16.dp)) {
-        Box {
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_background),
+        Box(Modifier.fillMaxSize()) {
+            // 替换为系统自带图标，避免资源报错
+            Icon(
+                imageVector = Icons.Filled.Map,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                tint = Color.Gray
             )
             Column(Modifier.align(Alignment.TopEnd).padding(16.dp)) {
                 IconButton(onClick = onDarkModeToggle) { Icon(if (isDarkMode) Icons.Filled.LightMode else Icons.Filled.DarkMode, null) }

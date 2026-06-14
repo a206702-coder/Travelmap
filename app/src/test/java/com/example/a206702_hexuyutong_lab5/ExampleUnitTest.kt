@@ -1,4 +1,4 @@
-package com.example.travelmap
+package com.example.a206702_hexuyutong_lab5
 
 import org.junit.Test
 
